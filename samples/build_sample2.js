@@ -75,7 +75,7 @@ const bullets = (items) => items.flatMap((t, i) => {
   const last = i === items.length - 1;
   const parts = String(t).split("\n");
   return parts.map((part, k) => ({ text: part, options: Object.assign(
-    k === 0 ? { bullet: true } : { softBreakBefore: true },
+    k === 0 ? { bullet: true } : { bullet: true, softBreakBefore: true },
     { breakLine: k === parts.length - 1 ? !last : false, paraSpaceAfter: 6 }) }));
 });
 
