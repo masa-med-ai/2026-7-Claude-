@@ -1,0 +1,7 @@
+{
+  "name": "gakkai-slides",
+  "version": "1.0.0",
+  "description": "医学系学会の口演スライドを「学会スライド 王道デザイン」（白背景・中央タイトル・黒の仕切り線・白黒青赤のみ・三線表）で Claude Slides のデッキとして作成する",
+  "author": { "name": "Masashi Misawa" },
+  "keywords": ["slides", "medical", "conference", "claude-slides", "japanese"]
+}

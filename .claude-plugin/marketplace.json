@@ -1,0 +1,11 @@
+{
+  "name": "masa-med-ai",
+  "owner": { "name": "Masashi Misawa" },
+  "plugins": [
+    {
+      "name": "gakkai-slides",
+      "source": "./plugins/gakkai-slides",
+      "description": "医学系学会の口演スライドを「学会スライド 王道デザイン」で Claude Slides のデッキとして作成する"
+    }
+  ]
+}
