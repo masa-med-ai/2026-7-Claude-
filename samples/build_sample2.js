@@ -5,7 +5,7 @@ const path = require("path");
 const { applyTheme } = require("/root/.claude/skills/synced/799db999-ab00-4cac-a372-9162854b4b30_135a17e0-994c-44ff-94f3-0d1372ca04aa/pptx/scripts/apply_theme.js");
 
 const cm = (v) => v / 2.54;
-const LOGO = path.join(__dirname, "..", "logo", "showa-logo.png");
+const LOGO = path.join(__dirname, "..", "design-system", "assets", "showa-medical-university.png");
 const FONT = "BIZ UDPGothic";
 
 const THEME = {
@@ -70,7 +70,46 @@ const cite = (slide, refs, y) => T(slide, refs.flatMap((r, i) => [
   { text: r.j, options: { bold: true, italic: true, breakLine: false } },
   { text: " " + r.y, options: { breakLine: i < refs.length - 1 } },
 ]), { x: cm(12.0), y: y ?? cm(16.3), w: cm(19.9), h: cm(1.4), fontSize: 14, align: "right", lineSpacingMultiple: 1.3 });
-const bullets = (items) => items.map((t, i) => ({ text: t, options: { bullet: true, breakLine: i < items.length - 1, paraSpaceAfter: 6 } }));
+// 箇条書き。項目内の "\n" は段落を分けない改行（行頭記号が増えない）にする。
+const bullets = (items) => items.flatMap((t, i) => {
+  const last = i === items.length - 1;
+  const parts = String(t).split("\n");
+  return parts.map((part, k) => ({ text: part, options: Object.assign(
+    k === 0 ? { bullet: true } : { softBreakBefore: true },
+    { breakLine: k === parts.length - 1 ? !last : false, paraSpaceAfter: 6 }) }));
+});
+
+
+// ===== 本文の配置（文字が少ないスライドの余白調整）=====
+// BODY_PLACE: "top"（仕切り線の直下から）/ "upper"（余白を上 1：下 2 に配分。既定）/ "center"（上下中央）
+// BODY_GROW : true なら本文が合計 3 行以下のとき文字サイズを 1 段上げる（26 → 32 pt）
+// どちらもスライドごとに stack(s, blocks, { place, grow }) で上書きできる。
+const BODY_PLACE = process.env.BODY_PLACE || "upper";
+const BODY_GROW = process.env.BODY_GROW !== "0";
+const SCALE = [14, 18, 22, 26, 32, 40, 48];
+const stepUp = (pt, n = 1) => SCALE[Math.min(SCALE.length - 1, Math.max(0, SCALE.indexOf(pt)) + n)];
+// blocks: [{ text | runs, lines, fontSize = 26, spacing = 1.5 }]。runs の options.big = true は数字用（2 段大きく）。
+function stack(slide, blocks, o = {}) {
+  const place = o.place || BODY_PLACE;
+  const top = o.top ?? CONTENT_Y + cm(0.6), bottom = o.bottom ?? cm(16.6), gap = o.gap ?? cm(0.9);
+  const totalLines = blocks.reduce((a, b) => a + b.lines, 0);
+  const grow = (o.grow ?? BODY_GROW) && totalLines <= 3;
+  const sized = blocks.map((b) => {
+    const fs = grow ? stepUp(b.fontSize || 26) : (b.fontSize || 26);
+    const sp = b.spacing || 1.5;
+    return Object.assign({}, b, { fs, sp, h: (b.lines * fs * sp) / 72 });
+  });
+  const total = sized.reduce((a, b) => a + b.h, 0) + gap * (sized.length - 1);
+  const free = Math.max(0, bottom - top - total);
+  let y = top + free * ({ top: 0, upper: 1 / 3, center: 1 / 2 }[place] ?? 1 / 3);
+  for (const b of sized) {
+    const content = b.runs
+      ? b.runs.map((r) => ({ text: r.text, options: Object.assign({}, r.options, { fontSize: r.options && r.options.big ? stepUp(b.fs, 1) : b.fs, big: undefined }) }))
+      : b.text;
+    T(slide, content, { x: b.x ?? X, y, w: b.w ?? W, h: b.h, fontSize: b.fs, lineSpacingMultiple: b.sp, align: "left" });
+    y += b.h + gap;
+  }
+}
 
 // 三線表: 上・表頭下・下の黒 1pt だけ
 function threeLineTable(slide, rows, colW, opts) {
@@ -97,18 +136,22 @@ function threeLineTable(slide, rows, colW, opts) {
 {
   const s = pres.addSlide({ masterName: "TITLE_NO_LOGO" });
   s.addText("利益相反（COI）の開示", { placeholder: "title" });
-  body(s, "筆頭演者：三澤将史", { x: X, y: cm(7.0), w: W, h: cm(1.4) });
-  body(s, "演題発表に関連し、開示すべき COI 関係にある企業などはありません。", { x: X, y: cm(9.0), w: W, h: cm(1.4) });
-  body(s, "倫理審査：昭和医科大学横浜市北部病院 倫理委員会　承認番号 [承認番号]", { x: X, y: cm(11.0), w: W, h: cm(1.4), fontSize: 22 });
+  stack(s, [
+    { text: "筆頭演者：三澤将史", lines: 1 },
+    { text: "演題発表に関連し、開示すべき COI 関係にある企業などはありません。", lines: 1 },
+    { text: "倫理審査：昭和医科大学横浜市北部病院 倫理委員会　承認番号 [承認番号]", lines: 1, fontSize: 22 },
+  ], { grow: false });
   s.addNotes("学会指定の様式があればそれに置き換える。");
 }
 // ---------- 3 背景 ----------
 {
   const s = pres.addSlide({ masterName: "TITLE_LOGO" });
   s.addText("背景", { placeholder: "title" });
-  body(s, "大腸 ESD 後出血は 2〜5% に起こり、\n再入院と追加の内視鏡止血を要する主な偶発症である", { x: X, y: cm(5.2), w: W, h: cm(2.8) });
-  body(s, "抗血栓薬の内服例では後出血が増えると報告されるが、\n薬剤の種類と休薬の有無で層別した国内データは少ない", { x: X, y: cm(8.6), w: W, h: cm(2.8) });
-  body(s, "近年は抗血栓薬を休薬せずに ESD を行う施設が増え、\nリスクの再評価が必要になっている", { x: X, y: cm(12.0), w: W, h: cm(2.8) });
+  stack(s, [
+    { text: "大腸 ESD 後出血は 2〜5% に起こり、\n再入院と追加の内視鏡止血を要する主な偶発症である", lines: 2 },
+    { text: "抗血栓薬の内服例では後出血が増えると報告されるが、\n薬剤の種類と休薬の有無で層別した国内データは少ない", lines: 2 },
+    { text: "近年は抗血栓薬を休薬せずに ESD を行う施設が増え、\nリスクの再評価が必要になっている", lines: 2 },
+  ], { bottom: cm(16.0) });
   cite(s, [{ a: "[First Author, et al.", j: "Journal", y: "Year]" }, { a: "[First Author, et al.", j: "Journal", y: "Year]" }]);
   s.addNotes("既知 2 点 + 未解決 1 点。引用は右下に 1 文献 1 行、雑誌名だけ太字イタリック。");
 }
@@ -116,13 +159,15 @@ function threeLineTable(slide, rows, colW, opts) {
 {
   const s = pres.addSlide({ masterName: "TITLE_LOGO" });
   s.addText("目的", { placeholder: "title" });
-  body(s, "大腸 ESD を受けた症例を対象に、", { x: X, y: cm(7.0), w: W, h: cm(1.4) });
-  T(s, [
-    { text: "抗血栓薬の種類と休薬の有無を含めた", options: { breakLine: true } },
-    { text: "ESD 後出血のリスク因子", options: { color: BLUE, breakLine: false } },
-    { text: "を明らかにする。" },
-  ], { x: X, y: cm(9.4), w: W, h: cm(2.8), fontSize: 26, lineSpacingMultiple: 1.5, align: "left" });
-  s.addNotes("目的は 1〜2 文。強調は青 1 か所。");
+  stack(s, [
+    { text: "大腸 ESD を受けた症例を対象に、", lines: 1 },
+    { runs: [
+      { text: "抗血栓薬の種類と休薬の有無を含めた", options: { breakLine: true } },
+      { text: "ESD 後出血のリスク因子", options: { color: BLUE, breakLine: false } },
+      { text: "を明らかにする。" },
+    ], lines: 2 },
+  ]);
+  s.addNotes("目的は 1〜2 文。強調は青 1 か所。本文 3 行以下なので 1 段大きく（32 pt）、余白は上 1：下 2。");
 }
 // ---------- 5 方法：デザインと対象 ----------
 {
@@ -175,7 +220,7 @@ function threeLineTable(slide, rows, colW, opts) {
 {
   const s = pres.addSlide({ masterName: "TITLE_LOGO" });
   s.addText("方法：統計解析", { placeholder: "title" });
-  T(s, bullets(["主解析：後出血の有無を目的変数とする多変量ロジスティック回帰", "共変量：年齢、性別、腫瘍径、部位、抗血栓薬の種類、休薬の有無、\n手技時間（単変量で P < 0.10 の因子を投入）", "結果はオッズ比（OR）と 95% 信頼区間で示す", "連続変数は中央値（四分位範囲）、Mann–Whitney U 検定", "欠測は主要評価項目になし。共変量の欠測は完全症例解析", "有意水準 両側 5%。解析ソフト：R 4.4.1"]), { x: X, y: cm(5.6), w: W, h: cm(10.5), fontSize: 22, lineSpacingMultiple: 1.5 });
+  stack(s, [{ text: bullets(["主解析：後出血の有無を目的変数とする多変量ロジスティック回帰", "共変量：年齢、性別、腫瘍径、部位、抗血栓薬の種類、休薬の有無、\n手技時間（単変量で P < 0.10 の因子を投入）", "結果はオッズ比（OR）と 95% 信頼区間で示す", "連続変数は中央値（四分位範囲）、Mann–Whitney U 検定", "欠測は主要評価項目になし。共変量の欠測は完全症例解析", "有意水準 両側 5%。解析ソフト：R 4.4.1"]), lines: 7, fontSize: 22, spacing: 1.5 }]);
   s.addNotes("主解析を 1 行目に。どの比較に何を使ったかを書く。");
 }
 // ---------- 10 結果：患者背景 ----------
@@ -262,22 +307,24 @@ function threeLineTable(slide, rows, colW, opts) {
 {
   const s = pres.addSlide({ masterName: "TITLE_LOGO" });
   s.addText("本研究の限界", { placeholder: "title" });
-  T(s, bullets(["後方視的研究であり、休薬の判断は担当医に委ねられていた", "抗凝固薬の継続例は 96 例と少なく、薬剤ごとの比較はできない", "3 施設とも高容量施設であり、一般化可能性に限りがある", "術後 30 日以降の出血と血栓塞栓症は評価していない"]), { x: X, y: cm(5.6), w: W, h: cm(10.0), fontSize: 26, lineSpacingMultiple: 1.6 });
+  stack(s, [{ text: bullets(["後方視的研究であり、休薬の判断は担当医に委ねられていた", "抗凝固薬の継続例は 96 例と少なく、薬剤ごとの比較はできない", "3 施設とも高容量施設であり、一般化可能性に限りがある", "術後 30 日以降の出血と血栓塞栓症は評価していない"]), lines: 4, spacing: 1.7 }]);
   s.addNotes("限界は 3〜4 点以内。");
 }
 // ---------- 15 結語 ----------
 {
   const s = pres.addSlide({ masterName: "TITLE_LOGO" });
   s.addText("結語", { placeholder: "title" });
-  T(s, [
-    { text: "大腸 ESD 後出血は全体で ", options: { fontSize: 26, breakLine: false } },
-    { text: "3.8", options: { fontSize: 32, color: BLUE, breakLine: false } },
-    { text: "%", options: { fontSize: 26, color: BLUE, breakLine: false } },
-    { text: " に起こり、", options: { fontSize: 26, breakLine: true } },
-    { text: "抗血栓薬あり群で 4.6 ポイント高かった。", options: { fontSize: 26 } },
-  ], { x: X, y: cm(5.6), w: W, h: cm(2.8), lineSpacingMultiple: 1.5 });
-  body(s, "独立したリスク因子は抗凝固薬の継続（OR 3.42）と\n腫瘍径 40 mm 以上（OR 1.94）であった。", { x: X, y: cm(9.0), w: W, h: cm(2.8) });
-  body(s, "抗凝固薬継続例では予防的止血と術後管理の強化を検討すべきである。", { x: X, y: cm(12.6), w: W, h: cm(1.6) });
+  stack(s, [
+    { runs: [
+      { text: "大腸 ESD 後出血は全体で ", options: { breakLine: false } },
+      { text: "3.8", options: { big: true, color: BLUE, breakLine: false } },
+      { text: "%", options: { color: BLUE, breakLine: false } },
+      { text: " に起こり、", options: { breakLine: true } },
+      { text: "抗血栓薬あり群で 4.6 ポイント高かった。" },
+    ], lines: 2 },
+    { text: "独立したリスク因子は抗凝固薬の継続（OR 3.42）と\n腫瘍径 40 mm 以上（OR 1.94）であった。", lines: 2 },
+    { text: "抗凝固薬継続例では予防的止血と術後管理の強化を検討すべきである。", lines: 1 },
+  ]);
   s.addNotes("結語は 3 点以内。このスライドを表示したまま終わる。");
 }
 
